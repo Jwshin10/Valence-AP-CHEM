@@ -55,6 +55,7 @@
       t.tab.classList.toggle('on', on);
       t.tab.setAttribute('aria-selected', on);
     }
+    body.classList.toggle('sp-on-calc', id === 'calc');
     sync();
   }
   function sync() {
@@ -154,219 +155,11 @@
     App.byId.reference.render(box, new U.Scope());
   }
 
-  /* ---------- calculator ---------- */
+  /* ---------- graphing calculator (works like the Desmos calculator in Bluebook) ---------- */
   function buildCalc(view) {
-    let ans = U.store.get('calcAns', 0), sig = U.store.get('calcSig', 'auto'), caret = null;
-    let hist = U.store.get('calcHist', []);
-    if (!Array.isArray(hist)) hist = [];
-    const touch = matchMedia('(hover: none)').matches;
-    const input = h('input', { type: 'text', class: 'calc-input', placeholder: '0', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', 'aria-label': 'Expression' });
-    const out = h('div', { class: 'calc-out', 'aria-live': 'polite' });
-    const screen = h('div', { class: 'calc-screen' }, input, out);
-    const sigSeg = U.seg({ options: [{ value: 'auto', label: 'Auto' }, { value: 2, label: '2' }, { value: 3, label: '3' }, { value: 4, label: '4' }, { value: 5, label: '5' }], value: sig, onChange: v => { sig = v; U.store.set('calcSig', v); preview(); } });
-    const keys = h('div', { class: 'calc-keys' });
-    const KEYS = [
-      ['log', 'log(', 'fn'], ['ln', 'ln(', 'fn'], ['10ˣ', '10^(', 'fn'], ['eˣ', 'exp(', 'fn'], ['√', 'sqrt(', 'fn'],
-      ['x²', '^2', 'fn'], ['xʸ', '^', 'fn'], ['(', '(', 'fn'], [')', ')', 'fn'], ['÷', '/', 'op'],
-      ['7', '7'], ['8', '8'], ['9', '9'], ['×', '*', 'op'], ['⌫', 'back', 'ctl', 'Delete'],
-      ['4', '4'], ['5', '5'], ['6', '6'], ['−', '-', 'op'], ['AC', 'clear', 'ctl', 'Clear'],
-      ['1', '1'], ['2', '2'], ['3', '3'], ['+', '+', 'op'], ['Ans', 'ans', 'ctl', 'Previous answer'],
-      ['0', '0'], ['.', '.'], ['×10ⁿ', 'E', 'fn', 'Times ten to the power'], ['(−)', '-', 'fn', 'Negative'], ['=', 'eval', 'eq', 'Equals'],
-    ];
-    for (const [label, val, kind, aria] of KEYS) {
-      const b = h('button', { type: 'button', class: 'calc-key' + (kind ? ' ' + kind : ''), 'aria-label': aria || label }, label);
-      b.addEventListener('pointerdown', e => e.preventDefault()); // keep the caret where it was
-      b.addEventListener('click', () => press(val));
-      keys.appendChild(b);
-    }
-    const CONSTS = [
-      ['N<sub>A</sub>', '6.022E23', 'Avogadro’s number, 6.022 × 10²³ mol⁻¹'], ['R', '8.314', 'Gas constant, 8.314 J/(mol·K)'], ['R', '0.08206', 'Gas constant, 0.08206 L·atm/(mol·K)'],
-      ['h', '6.626E-34', 'Planck’s constant, 6.626 × 10⁻³⁴ J·s'], ['c', '2.998E8', 'Speed of light, 2.998 × 10⁸ m/s'], ['F', '96485', 'Faraday’s constant, 96,485 C/mol'], ['K<sub>w</sub>', '1.0E-14', 'Kw at 25 °C, 1.0 × 10⁻¹⁴'],
-    ];
-    const consts = h('div', { class: 'calc-consts' }, CONSTS.map(([l, v, t]) => {
-      const b = h('button', { type: 'button', class: 'chip', title: t, 'aria-label': t, html: `<b>${l}</b> <span>${v.replace(/E(-?\d+)/, (m, p) => ' × 10' + U.supText(p))}</span>` });
-      b.addEventListener('pointerdown', e => e.preventDefault());
-      b.addEventListener('click', () => insert(v));
-      return b;
-    }));
-    const mmBtn = U.btn('Molar mass', () => insert('mm()', -1), 'sm');
-    mmBtn.addEventListener('pointerdown', e => e.preventDefault());
-    const histBox = h('div', { class: 'calc-hist' });
-    view.append(screen,
-      h('div', { class: 'flex-between calc-bar' }, h('div', { class: 'field calc-sig' }, h('span', { class: 'lbl' }, 'Significant figures'), sigSeg.el), mmBtn),
-      keys,
-      h('div', { class: 'stack', style: { gap: '6px' } }, h('span', { class: 'lbl small' }, 'Constants'), consts),
-      h('p', { class: 'small muted' }, 'Type with your keyboard or tap the keys. Write powers of ten with E (6.022E23). For molar mass, type mm(H2SO4) and use it in a calculation, such as 25/mm(NaCl).'),
-      histBox);
-
-    input.addEventListener('input', preview);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); run(); } });
-    ['keyup', 'click', 'select', 'blur'].forEach(ev => input.addEventListener(ev, () => { caret = [input.selectionStart, input.selectionEnd]; }));
-
-    function insert(txt, back = 0) {
-      const v = input.value;
-      const [a, b] = caret || [v.length, v.length];
-      input.value = v.slice(0, a) + txt + v.slice(b);
-      const p = a + txt.length + back;
-      caret = [p, p];
-      if (!touch) input.focus();
-      try { input.setSelectionRange(p, p); } catch (e) { /* ignore */ }
-      preview();
-    }
-    function press(v) {
-      if (v === 'eval') return run();
-      if (v === 'clear') { input.value = ''; caret = [0, 0]; out.textContent = ''; out.className = 'calc-out'; return; }
-      if (v === 'back') {
-        const [a, b] = caret || [input.value.length, input.value.length];
-        if (a !== b) { input.value = input.value.slice(0, a) + input.value.slice(b); caret = [a, a]; }
-        else if (a > 0) { input.value = input.value.slice(0, a - 1) + input.value.slice(a); caret = [a - 1, a - 1]; }
-        if (!touch) { input.focus(); input.setSelectionRange(caret[0], caret[0]); }
-        return preview();
-      }
-      if (v === 'ans' && !input.value.trim()) return insert('ans');
-      insert(v);
-    }
-    function preview() {
-      out.className = 'calc-out';
-      const s = input.value.trim();
-      if (!s) { out.textContent = ''; return; }
-      try { out.innerHTML = '= ' + fmt(evaluate(s, ans), sig); out.classList.add('soft'); }
-      catch (e) { out.textContent = ''; }
-    }
-    function run() {
-      const s = input.value.trim();
-      if (!s) return;
-      try {
-        const v = evaluate(s, ans);
-        ans = v; U.store.set('calcAns', v);
-        hist.unshift([s, v]); hist = hist.slice(0, 12); U.store.set('calcHist', hist);
-        out.className = 'calc-out';
-        out.innerHTML = '= ' + fmt(v, sig);
-        input.value = ''; caret = [0, 0];
-        input.placeholder = 'ans';
-        drawHist();
-      } catch (e) { out.className = 'calc-out bad'; out.textContent = e.message; }
-    }
-    function drawHist() {
-      U.clear(histBox);
-      if (!hist.length) return;
-      const clr = h('button', { type: 'button', class: 'linkish small' }, 'Clear history');
-      clr.addEventListener('click', () => { hist = []; U.store.set('calcHist', hist); drawHist(); });
-      histBox.append(h('div', { class: 'flex-between' }, h('span', { class: 'lbl small' }, 'History'), clr),
-        h('ol', null, hist.map(([s, v]) => {
-          const b = h('button', { type: 'button', title: 'Use this answer' }, h('span', { class: 'e' }, s), h('span', { class: 'v', html: fmt(v, sig) }));
-          b.addEventListener('pointerdown', e => e.preventDefault());
-          b.addEventListener('click', () => insert(raw(v)));
-          return h('li', null, b);
-        })));
-    }
-    drawHist();
-  }
-
-  /* number shown on the calculator: scientific notation for very large or small values */
-  function fmt(v, sig) {
-    if (v === 0) return '0';
-    const n = sig === 'auto' ? null : +sig;
-    const a = Math.abs(v);
-    if (a >= 1e6 || a < 1e-3) {
-      let [m, e] = v.toExponential(n ? n - 1 : 6).split('e');
-      if (!n) m = m.replace(/\.?0+$/, '');
-      return `${m.replace('-', '−')} × 10<sup>${(+e).toString().replace('-', '−')}</sup>`;
-    }
-    const s = n ? v.toPrecision(n) : String(+v.toPrecision(10));
-    if (/e/.test(s)) { const [m, e] = s.split('e'); return `${m.replace('-', '−')} × 10<sup>${(+e).toString().replace('-', '−')}</sup>`; }
-    return s.replace('-', '−');
-  }
-  const raw = v => String(+v.toPrecision(10)).replace('e+', 'E').replace('e', 'E');
-
-  /* safe expression evaluator: + − × ÷ ^, parentheses, log ln sqrt exp, pi e ans, mm(formula) */
-  function evaluate(src, ansVal) {
-    const s = src.replace(/[×·]/g, '*').replace(/÷/g, '/').replace(/[−–]/g, '-').replace(/π/g, 'pi').replace(/√/g, 'sqrt');
-    const toks = [];
-    let i = 0;
-    while (i < s.length) {
-      const ch = s[i];
-      if (/\s/.test(ch)) { i++; continue; }
-      const num = /^(\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/.exec(s.slice(i));
-      if (num) {
-        const after = s.slice(i + num[0].length);
-        if (/^[eE]([+-]|$|[^a-zA-Z])/.test(after)) throw new Error('Finish the power of ten after E, for example 6.022E23.');
-        toks.push({ t: 'n', v: parseFloat(num[0]) }); i += num[0].length; continue;
-      }
-      const id = /^[a-zA-Z]+/.exec(s.slice(i));
-      if (id) {
-        const w = id[0].toLowerCase();
-        i += id[0].length;
-        if (w === 'mm') {
-          while (s[i] === ' ') i++;
-          if (s[i] !== '(') throw new Error('Write a molar mass as mm(formula), for example mm(H2O).');
-          let depth = 1, j = i + 1;
-          while (j < s.length && depth) { if (s[j] === '(') depth++; else if (s[j] === ')') depth--; j++; }
-          if (depth) throw new Error('Close the parenthesis after the formula in mm( ).');
-          const f = s.slice(i + 1, j - 1).trim();
-          toks.push({ t: 'n', v: molar(f) }); i = j; continue;
-        }
-        toks.push({ t: 'id', v: w }); continue;
-      }
-      if ('+-*/^()'.includes(ch)) { toks.push({ t: ch }); i++; continue; }
-      throw new Error(`“${ch}” isn’t something the calculator understands.`);
-    }
-    let k = 0;
-    const peek = () => toks[k], next = () => toks[k++];
-    const FN = { log: Math.log10, ln: Math.log, sqrt: Math.sqrt, exp: Math.exp, abs: Math.abs };
-    const CONST = { pi: Math.PI, e: Math.E, ans: ansVal };
-    function expr() {
-      let v = term();
-      while (peek() && (peek().t === '+' || peek().t === '-')) v = next().t === '+' ? v + term() : v - term();
-      return v;
-    }
-    function term() {
-      let v = unary();
-      for (;;) {
-        const p = peek();
-        if (p && (p.t === '*' || p.t === '/')) { next(); const r = unary(); v = p.t === '*' ? v * r : v / r; }
-        else if (p && (p.t === '(' || p.t === 'id')) v *= unary(); // implicit: 2(3), 2pi, 3ans
-        else return v;
-      }
-    }
-    function unary() {
-      const p = peek();
-      if (p && p.t === '-') { next(); return -unary(); }
-      if (p && p.t === '+') { next(); return unary(); }
-      return power();
-    }
-    function power() {
-      const b = primary();
-      if (peek() && peek().t === '^') { next(); return Math.pow(b, unary()); }
-      return b;
-    }
-    function primary() {
-      const p = next();
-      if (!p) throw new Error('The expression ends too early.');
-      if (p.t === 'n') return p.v;
-      if (p.t === '(') { const v = expr(); if (!peek() || peek().t !== ')') throw new Error('Close every “(” with a “)”.'); next(); return v; }
-      if (p.t === 'id') {
-        if (p.v in FN) {
-          if (!peek() || peek().t !== '(') throw new Error(`Put the number after ${p.v} in parentheses, like ${p.v}(2).`);
-          next(); const v = expr(); if (!peek() || peek().t !== ')') throw new Error('Close every “(” with a “)”.'); next(); return FN[p.v](v);
-        }
-        if (p.v in CONST) return CONST[p.v];
-        throw new Error(`“${p.v}” isn’t a function or constant. Try log, ln, sqrt, exp, pi, e or ans.`);
-      }
-      throw new Error(`Something is missing before “${p.t}”.`);
-    }
-    if (!toks.length) throw new Error('Type an expression first.');
-    const v = expr();
-    if (k < toks.length) throw new Error(toks[k].t === ')' ? 'There is an extra “)”.' : 'Check the expression: something is out of place.');
-    if (!isFinite(v)) throw new Error('No real answer (for example, dividing by zero or taking the log of a negative number).');
-    return v;
-  }
-  function molar(f) {
-    if (!f) throw new Error('Put a formula inside mm( ), for example mm(H2O).');
-    let c;
-    try { c = U.parseFormula(f); } catch (e) { throw new Error(`Couldn’t read “${f}” as a formula. ${e.message}`); }
-    for (const el in c) if (!ELEMENTS.bySym[el]) throw new Error(`“${el}” isn’t an element symbol (capitalization matters).`);
-    return U.molarMass(f);
+    const toggleWide = () => { const on = !body.classList.contains('sp-wide'); body.classList.toggle('sp-wide', on); U.store.set('sideWide', on); return on; };
+    GraphCalc.create(view, { onExpand: toggleWide });
+    view.appendChild(h('p', { class: 'small muted gc-note' }, 'Works like the Desmos graphing calculator in Bluebook, the one on the digital AP Chemistry exam. Type numbers and expressions, define variables (a = 2), graph y = …, and fit table data with ~, such as y₁ ~ mx₁ + b. For scientific notation type 6.022·10^23.'));
   }
 
   function pageLink(href, text) {
@@ -376,5 +169,6 @@
   }
 
   if (U.store.get('sideOpen', U.store.get('ptPanelOpen', false)) && innerWidth >= 1500) open();
-  window.SidePanel = { open, close, evaluate, fmt };
+  if (U.store.get('sideWide', false)) body.classList.add('sp-wide');
+  window.SidePanel = { open, close };
 })();

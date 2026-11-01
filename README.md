@@ -12,7 +12,7 @@ No install, no build step, no internet needed (except for web fonts).
 - **From the source:** open `index.html` in any modern browser.
 - **Host it:** in the GitHub repo go to *Settings → Pages*, choose *Deploy from a branch*, pick your branch and the `/ (root)` folder. The site appears at `https://<user>.github.io/<repo>/`.
 
-Press <kbd>/</kbd> to search topics. Use the moon/sun button for dark mode. Three quick tools open in a side panel from any page: the **periodic table** (<kbd>P</kbd>), the **reference sheet** (<kbd>R</kbd>) and a **calculator** (<kbd>C</kbd>) with scientific notation, logs, constants and a molar-mass function (`25/mm(NaCl)`). Use the buttons in the top bar, the tabs on the right edge, or the keys; the panel stays open while you move between topics. Every topic has a direct link such as `index.html#imf` or `index.html#titration`.
+Press <kbd>/</kbd> to search topics. Use the moon/sun button for dark mode. Three quick tools open in a side panel from any page: the **periodic table** (<kbd>P</kbd>), the **reference sheet** (<kbd>R</kbd>) and a **graphing calculator** (<kbd>C</kbd>) that works like the Desmos calculator built into Bluebook for the digital AP Chemistry exam (expression list, graphs, sliders, tables, `~` regressions, solving equations in x, and the Desmos keypad). Use the buttons in the top bar, the tabs on the right edge, or the keys; the panel stays open while you move between topics. Every topic has a direct link such as `index.html#imf` or `index.html#titration`.
 
 ## What's inside
 
@@ -52,6 +52,7 @@ js/data/              periodic table, molecule library, and the formula → stru
 js/modules/u1-*.js …  one file per topic, grouped by unit
 js/app.js             navigation, search, routing, home page
 js/sidepanel.js       side panel on every page: periodic table, reference sheet, calculator
+js/graphcalc.js       Desmos-style graphing calculator used in the side panel
 tools/build.mjs       bundles everything into dist/*.html
 ```
 
